@@ -25,6 +25,18 @@ export interface ElectronAPI {
   analyzeAudioFromBase64: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile: (path: string) => Promise<{ text: string; timestamp: number }>
   quitApp: () => Promise<void>
+
+  // Chat — routes to whichever provider is currently active (Ollama / Gemini)
+  geminiChat: (message: string) => Promise<string>
+
+  // Model switching
+  getCurrentLlmConfig: () => Promise<{ provider: "gemini" | "ollama"; model: string; isOllama: boolean }>
+  switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
+  getAvailableOllamaModels: () => Promise<string[]>
+  testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+
+  // Generic IPC invoke (fallback)
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
 
@@ -32,4 +44,4 @@ declare global {
   interface Window {
     electronAPI: ElectronAPI
   }
-} 
+}

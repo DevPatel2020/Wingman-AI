@@ -1,5 +1,9 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage } from "electron"
+import { loadEnv, getLoadedEnvPath } from "./env"
 import { initializeIpcHandlers } from "./ipcHandlers"
+
+loadEnv()
+console.log(`[App] Environment loaded from: ${getLoadedEnvPath() ?? "default"}`)
 import { WindowHelper } from "./WindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"

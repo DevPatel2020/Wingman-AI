@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { IoLogOutOutline } from "react-icons/io5"
 import { Dialog, DialogContent, DialogClose } from "../ui/dialog"
+import FormattedMessage from "./FormattedMessage"
 
 interface QueueCommandsProps {
   onTooltipVisibilityChange: (visible: boolean, height: number) => void
@@ -21,7 +22,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [audioResult, setAudioResult] = useState<string | null>(null)
   const chunks = useRef<Blob[]>([])
-  // Remove all chat-related state, handlers, and the Dialog overlay from this file.
+  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
     let tooltipHeight = 0
@@ -44,10 +45,19 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
       // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const recorder = new MediaRecorder(stream)
-        recorder.ondataavailable = (e) => chunks.current.push(e.data)
+        streamRef.current = stream
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/ogg'
+        const recorder = new MediaRecorder(stream, { mimeType })
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.current.push(e.data) }
         recorder.onstop = async () => {
-          const blob = new Blob(chunks.current, { type: chunks.current[0]?.type || 'audio/webm' })
+          // Stop all tracks to release the microphone indicator
+          streamRef.current?.getTracks().forEach(track => track.stop())
+          streamRef.current = null
+          const blob = new Blob(chunks.current, { type: mimeType })
           chunks.current = []
           const reader = new FileReader()
           reader.onloadend = async () => {
@@ -55,8 +65,9 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
             try {
               const result = await window.electronAPI.analyzeAudioFromBase64(base64Data, blob.type)
               setAudioResult(result.text)
-            } catch (err) {
-              setAudioResult('Audio analysis failed.')
+            } catch (err: any) {
+              const errorMessage = err?.message || 'Audio analysis failed.'
+              setAudioResult(`❌ Error: ${errorMessage}\n\n💡 Tip: If you're hitting rate limits, try:\n- Waiting a few minutes before trying again\n- Switching to Ollama (local AI) for unlimited usage\n- Upgrading your Gemini API quota`)
             }
           }
           reader.readAsDataURL(blob)
@@ -64,8 +75,14 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
         setMediaRecorder(recorder)
         recorder.start()
         setIsRecording(true)
-      } catch (err) {
-        setAudioResult('Could not start recording.')
+      } catch (err: any) {
+        const msg = err?.name === 'NotAllowedError'
+          ? 'Microphone access denied. Please allow microphone access in system settings.'
+          : err?.name === 'NotFoundError'
+          ? 'No microphone found. Please connect a microphone and try again.'
+          : 'Could not start recording: ' + (err?.message || String(err))
+        setAudioResult(`❌ ${msg}`)
+        setIsRecording(false)
       }
     } else {
       // Stop recording
@@ -246,8 +263,13 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
       </div>
       {/* Audio Result Display */}
       {audioResult && (
-        <div className="mt-2 p-2 bg-white/10 rounded text-white text-xs max-w-md">
-          <span className="font-semibold">Audio Result:</span> {audioResult}
+        <div className="mt-2 p-3 bg-white rounded-lg text-gray-800 text-xs max-w-md border border-gray-200 shadow-lg">
+          <span className="font-semibold block mb-2 text-gray-900">Audio Result:</span>
+          <div className="bg-white p-3 rounded border border-gray-100 max-h-64 overflow-y-auto overflow-x-hidden">
+            <div className="text-gray-700">
+              <FormattedMessage text={audioResult} />
+            </div>
+          </div>
         </div>
       )}
       {/* Chat Dialog Overlay */}

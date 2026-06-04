@@ -10,6 +10,7 @@ import {
 } from "../components/ui/toast"
 import QueueCommands from "../components/Queue/QueueCommands"
 import ModelSelector from "../components/ui/ModelSelector"
+import FormattedMessage from "../components/Queue/FormattedMessage"
 
 interface QueueProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
@@ -34,7 +35,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   const chatInputRef = useRef<HTMLInputElement>(null)
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [currentModel, setCurrentModel] = useState<{ provider: string; model: string }>({ provider: "gemini", model: "gemini-2.0-flash" })
+  const [currentModel, setCurrentModel] = useState<{ provider: "gemini" | "ollama"; model: string }>({ provider: "gemini", model: "gemini-2.5-flash-lite" })
 
   const barRef = useRef<HTMLDivElement>(null)
 
@@ -88,21 +89,35 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 
   const handleChatSend = async () => {
     if (!chatInput.trim()) return
-    setChatMessages((msgs) => [...msgs, { role: "user", text: chatInput }])
+    const message = chatInput.trim()
+    setChatMessages((msgs) => [...msgs, { role: "user", text: message }])
     setChatLoading(true)
     setChatInput("")
     try {
-      const response = await window.electronAPI.invoke("gemini-chat", chatInput)
+      const response = await window.electronAPI.geminiChat(message)
       setChatMessages((msgs) => [...msgs, { role: "gemini", text: response }])
-    } catch (err) {
-      setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }])
+    } catch (err: any) {
+      const errorMsg = err?.message || String(err)
+      let userFriendlyMsg = "❌ Error: " + errorMsg
+
+      const providerName = currentModel.provider === 'ollama' ? 'Ollama' : 'Gemini'
+      if (errorMsg.includes("429") || errorMsg.includes("rate limit") || errorMsg.includes("quota")) {
+        userFriendlyMsg = `⚠️ ${providerName} rate limit\n\nWait 1-2 minutes, or open ⚙️ Models and switch to Ollama.`
+      } else if (errorMsg.includes("fetch")) {
+        userFriendlyMsg = `🔌 Connection failed\n\nAre you offline? Or if using Ollama, make sure the Ollama app is running.`
+      } else if (errorMsg.includes("403") || errorMsg.includes("API key")) {
+        userFriendlyMsg = `🔑 API Key error\n\nCheck your ${providerName} API key in the ⚙️ Models tab.`
+      } else if (errorMsg.includes('Audio analysis is not supported')) {
+        userFriendlyMsg = `❌ Audio not supported\n\nAudio recording requires Gemini.\nClick ⚙️ Models → ☁️ Gemini → Apply.`
+      }
+
+      setChatMessages((msgs) => [...msgs, { role: "gemini", text: userFriendlyMsg }])
     } finally {
       setChatLoading(false)
       chatInputRef.current?.focus()
     }
   }
 
-  // Load current model configuration on mount
   useEffect(() => {
     const loadCurrentModel = async () => {
       try {
@@ -163,24 +178,19 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }, [isTooltipVisible, tooltipHeight])
 
-  // Seamless screenshot-to-LLM flow
   useEffect(() => {
-    // Listen for screenshot taken event
     const unsubscribe = window.electronAPI.onScreenshotTaken(async (data) => {
-      // Refetch screenshots to update the queue
       await refetch();
-      // Show loading in chat
       setChatLoading(true);
       try {
-        // Get the latest screenshot path
         const latest = data?.path || (Array.isArray(data) && data.length > 0 && data[data.length - 1]?.path);
         if (latest) {
-          // Call the LLM to process the screenshot
           const response = await window.electronAPI.invoke("analyze-image-file", latest);
           setChatMessages((msgs) => [...msgs, { role: "gemini", text: response.text }]);
         }
-      } catch (err) {
-        setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }]);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setChatMessages((msgs) => [...msgs, { role: "gemini", text: `❌ ${msg}` }]);
       } finally {
         setChatLoading(false);
       }
@@ -205,11 +215,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 
   const handleModelChange = (provider: "ollama" | "gemini", model: string) => {
     setCurrentModel({ provider, model })
-    // Update chat messages to reflect the model change
-    const modelName = provider === "ollama" ? model : "Gemini 2.0 Flash"
+    const icons: Record<string, string> = { ollama: "🏠", gemini: "☁️" }
+    const icon = icons[provider] || "☁️"
+    const modelName = provider === "ollama" ? model : "Gemini 2.5 Flash Lite"
     setChatMessages((msgs) => [...msgs, { 
       role: "gemini", 
-      text: `🔄 Switched to ${provider === "ollama" ? "🏠" : "☁️"} ${modelName}. Ready for your questions!` 
+      text: `🔄 Switched to ${icon} ${modelName}. Ready for your questions!` 
     }])
   }
 
@@ -243,14 +254,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
               onSettingsToggle={handleSettingsToggle}
             />
           </div>
-          {/* Conditional Settings Interface */}
           {isSettingsOpen && (
             <div className="mt-4 w-full mx-auto">
               <ModelSelector onModelChange={handleModelChange} onChatOpen={() => setIsChatOpen(true)} />
             </div>
           )}
           
-          {/* Conditional Chat Interface */}
           {isChatOpen && (
             <div className="mt-4 w-full mx-auto liquid-glass chat-container p-4 flex flex-col">
             <div className="flex-1 overflow-y-auto mb-3 p-3 rounded-lg bg-white/10 backdrop-blur-md max-h-64 min-h-[120px] glass-content border border-white/20 shadow-lg">
@@ -274,9 +283,13 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                           ? "bg-gray-700/80 text-gray-100 ml-12 border-gray-600/40" 
                           : "bg-white/85 text-gray-700 mr-12 border-gray-200/50"
                       }`}
-                      style={{ wordBreak: "break-word", lineHeight: "1.4" }}
+                      style={{ wordBreak: "break-word", lineHeight: "1.6" }}
                     >
-                      {msg.text}
+                      {msg.role === "gemini" ? (
+                        <FormattedMessage text={msg.text} />
+                      ) : (
+                        <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
+                      )}
                     </div>
                   </div>
                 ))

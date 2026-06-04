@@ -40,7 +40,9 @@ interface ElectronAPI {
   getAvailableOllamaModels: () => Promise<string[]>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
+
   testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+  centerAndShowWindow: () => Promise<void>
   
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
@@ -180,12 +182,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   analyzeImageFile: (path: string) => ipcRenderer.invoke("analyze-image-file", path),
   quitApp: () => ipcRenderer.invoke("quit-app"),
   
+  // Chat with active AI provider (Ollama / Gemini — whichever is active)
+  geminiChat: (message: string) => ipcRenderer.invoke("gemini-chat", message),
+  
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke("get-current-llm-config"),
   getAvailableOllamaModels: () => ipcRenderer.invoke("get-available-ollama-models"),
   switchToOllama: (model?: string, url?: string) => ipcRenderer.invoke("switch-to-ollama", model, url),
   switchToGemini: (apiKey?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey),
+
   testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
+  centerAndShowWindow: () => ipcRenderer.invoke("center-and-show-window"),
   
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
 } as ElectronAPI)

@@ -2,9 +2,10 @@
 
 import { AppState } from "./main"
 import { LLMHelper } from "./LLMHelper"
-import dotenv from "dotenv"
+import { envFlag, envString, loadEnv, getLoadedEnvPath } from "./env"
 
-dotenv.config()
+const envPath = loadEnv()
+console.log(`[ProcessingHelper] Loaded .env from: ${getLoadedEnvPath() ?? envPath}`)
 
 const isDev = process.env.NODE_ENV === "development"
 const isDevTest = process.env.IS_DEV_TEST === "true"
@@ -19,22 +20,30 @@ export class ProcessingHelper {
   constructor(appState: AppState) {
     this.appState = appState
     
-    // Check if user wants to use Ollama
-    const useOllama = process.env.USE_OLLAMA === "true"
-    const ollamaModel = process.env.OLLAMA_MODEL // Don't set default here, let LLMHelper auto-detect
-    const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434"
-    
+    const useOllama = envFlag("USE_OLLAMA")
+    const ollamaModel = envString("OLLAMA_MODEL")
+    const ollamaUrl = envString("OLLAMA_URL") || "http://localhost:11434"
+    const geminiApiKey = envString("GEMINI_API_KEY")
+
+    // ── Priority: Ollama > Gemini ────────────────────────────────────
     if (useOllama) {
       console.log("[ProcessingHelper] Initializing with Ollama")
       this.llmHelper = new LLMHelper(undefined, true, ollamaModel, ollamaUrl)
     } else {
-      const apiKey = process.env.GEMINI_API_KEY
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY not found in environment variables. Set GEMINI_API_KEY or enable Ollama with USE_OLLAMA=true")
-      }
-      console.log("[ProcessingHelper] Initializing with Gemini")
-      this.llmHelper = new LLMHelper(apiKey, false)
+      this.llmHelper = this.initGemini(geminiApiKey)
     }
+  }
+
+  private initGemini(apiKey?: string): LLMHelper {
+    if (!apiKey) {
+      // No key at all — create a dummy helper that returns friendly errors
+      console.warn("[ProcessingHelper] No API key found. App will start but AI calls will fail.")
+      console.warn("[ProcessingHelper] Set GEMINI_API_KEY in .env")
+      // Use a placeholder so the app doesn't crash; errors handled per-call
+      return new LLMHelper("placeholder_no_key", false)
+    }
+    console.log("[ProcessingHelper] Initializing with Gemini")
+    return new LLMHelper(apiKey, false)
   }
 
   public async processScreenshots(): Promise<void> {

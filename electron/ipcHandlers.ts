@@ -2,6 +2,8 @@
 
 import { ipcMain, app } from "electron"
 import { AppState } from "./main"
+import { getLoadedEnvPath, loadEnv } from "./env"
+import { formatLlmError } from "./llmErrors"
 
 export function initializeIpcHandlers(appState: AppState): void {
   ipcMain.handle(
@@ -95,21 +97,23 @@ export function initializeIpcHandlers(appState: AppState): void {
   // IPC handler for analyzing image from file path
   ipcMain.handle("analyze-image-file", async (event, path: string) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().analyzeImageFile(path)
-      return result
+      const llm = appState.processingHelper.getLLMHelper()
+      return await llm.analyzeImageFile(path)
     } catch (error: any) {
       console.error("Error in analyze-image-file handler:", error)
-      throw error
+      const llm = appState.processingHelper.getLLMHelper()
+      throw new Error(formatLlmError(error, llm.getCurrentProvider()))
     }
   })
 
   ipcMain.handle("gemini-chat", async (event, message: string) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message);
-      return result;
+      const llm = appState.processingHelper.getLLMHelper()
+      return await llm.chatWithGemini(message)
     } catch (error: any) {
-      console.error("Error in gemini-chat handler:", error);
-      throw error;
+      console.error("Error in chat handler:", error)
+      const llm = appState.processingHelper.getLLMHelper()
+      throw new Error(formatLlmError(error, llm.getCurrentProvider()))
     }
   });
 
@@ -141,11 +145,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   // LLM Model Management Handlers
   ipcMain.handle("get-current-llm-config", async () => {
     try {
+      loadEnv()
       const llmHelper = appState.processingHelper.getLLMHelper();
       return {
         provider: llmHelper.getCurrentProvider(),
         model: llmHelper.getCurrentModel(),
-        isOllama: llmHelper.isUsingOllama()
+        isOllama: llmHelper.isUsingOllama(),
+        envPath: getLoadedEnvPath() ?? undefined
       };
     } catch (error: any) {
       console.error("Error getting current LLM config:", error);
@@ -166,9 +172,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   ipcMain.handle("switch-to-ollama", async (_, model?: string, url?: string) => {
     try {
+      loadEnv()
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToOllama(model, url);
-      return { success: true };
+      return { success: true, provider: llmHelper.getCurrentProvider(), model: llmHelper.getCurrentModel() };
     } catch (error: any) {
       console.error("Error switching to Ollama:", error);
       return { success: false, error: error.message };
@@ -177,14 +184,16 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   ipcMain.handle("switch-to-gemini", async (_, apiKey?: string) => {
     try {
+      loadEnv()
       const llmHelper = appState.processingHelper.getLLMHelper();
       await llmHelper.switchToGemini(apiKey);
-      return { success: true };
+      return { success: true, provider: llmHelper.getCurrentProvider(), model: llmHelper.getCurrentModel() };
     } catch (error: any) {
       console.error("Error switching to Gemini:", error);
       return { success: false, error: error.message };
     }
   });
+
 
   ipcMain.handle("test-llm-connection", async () => {
     try {

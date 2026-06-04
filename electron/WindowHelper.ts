@@ -1,4 +1,3 @@
-
 import { BrowserWindow, screen } from "electron"
 import { AppState } from "main"
 import path from "node:path"
@@ -99,7 +98,28 @@ export class WindowHelper {
 
     this.mainWindow = new BrowserWindow(windowSettings)
     // this.mainWindow.webContents.openDevTools()
+    // Enable content protection: Window visible to user but hidden from screen sharing/recordings
+    // This allows you to use Cluely during screen shares without viewers seeing it
     this.mainWindow.setContentProtection(true)
+
+    // Grant microphone (and other media) permissions so audio recording works on Windows
+    this.mainWindow.webContents.session.setPermissionRequestHandler(
+      (webContents, permission, callback) => {
+        const allowedPermissions = ['media', 'audioCapture', 'microphone']
+        if (allowedPermissions.includes(permission)) {
+          callback(true)
+        } else {
+          callback(false)
+        }
+      }
+    )
+    // Also handle permission checks (Electron 20+)
+    this.mainWindow.webContents.session.setPermissionCheckHandler(
+      (webContents, permission) => {
+        const allowedPermissions = ['media', 'audioCapture', 'microphone']
+        return allowedPermissions.includes(permission)
+      }
+    )
 
     if (process.platform === "darwin") {
       this.mainWindow.setVisibleOnAllWorkspaces(true, {
@@ -131,7 +151,9 @@ export class WindowHelper {
         this.mainWindow.show()
         this.mainWindow.focus()
         this.mainWindow.setAlwaysOnTop(true)
-        console.log("Window is now visible and centered")
+        // Ensure content protection is enabled (visible to user, hidden from screen sharing)
+        this.mainWindow.setContentProtection(true)
+        console.log("Window is now visible and centered (protected from screen sharing)")
       }
     })
 
@@ -208,7 +230,12 @@ export class WindowHelper {
       })
     }
 
-    this.mainWindow.showInactive()
+    // Use show() instead of showInactive() to ensure window is visible to user
+    // Content protection will still hide it from screen sharing
+    this.mainWindow.show()
+    this.mainWindow.focus()
+    // Re-apply content protection after showing (in case it was reset)
+    this.mainWindow.setContentProtection(true)
 
     this.isWindowVisible = true
   }
@@ -263,6 +290,9 @@ export class WindowHelper {
     this.mainWindow.show()
     this.mainWindow.focus()
     this.mainWindow.setAlwaysOnTop(true)
+    // Ensure content protection is enabled so window is hidden from screen sharing
+    // but remains visible to the user
+    this.mainWindow.setContentProtection(true)
     this.isWindowVisible = true
     
     console.log(`Window centered and shown`)

@@ -50,6 +50,7 @@ declare global {
       quitApp: () => Promise<void>
       
       // LLM Model Management
+      geminiChat: (message: string) => Promise<string>
       getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini"; model: string; isOllama: boolean }>
       getAvailableOllamaModels: () => Promise<string[]>
       switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>

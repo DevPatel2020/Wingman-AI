@@ -16,20 +16,25 @@ import { ProblemStatementData } from "../types/solutions"
 import { AudioResult } from "../types/audio"
 import SolutionCommands from "../components/Solutions/SolutionCommands"
 import Debug from "./Debug"
+import FormattedMessage from "../components/Queue/FormattedMessage"
 
 // (Using global ElectronAPI type from src/types/electron.d.ts)
 
 export const ContentSection = ({
   title,
   content,
-  isLoading
+  isLoading,
+  isFormatted = false,
+  isAudioResult = false
 }: {
   title: string
   content: React.ReactNode
   isLoading: boolean
+  isFormatted?: boolean
+  isAudioResult?: boolean
 }) => (
   <div className="space-y-2">
-    <h2 className="text-[13px] font-medium text-white tracking-wide">
+    <h2 className={`text-[13px] font-medium tracking-wide ${isAudioResult ? 'text-gray-900' : 'text-white'}`}>
       {title}
     </h2>
     {isLoading ? (
@@ -39,8 +44,16 @@ export const ContentSection = ({
         </p>
       </div>
     ) : (
-      <div className="text-[13px] leading-[1.4] text-gray-100 max-w-[600px]">
-        {content}
+      <div className={`text-[13px] leading-[1.4] max-w-[600px] max-h-96 overflow-y-auto overflow-x-hidden pr-2 ${
+        isAudioResult 
+          ? 'bg-white p-4 rounded-lg border border-gray-200 shadow-md text-gray-700' 
+          : 'text-gray-100'
+      }`}>
+        {isFormatted && typeof content === 'string' ? (
+          <FormattedMessage text={content} />
+        ) : (
+          content
+        )}
       </div>
     )}
   </div>
@@ -280,8 +293,17 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                 // Store result in react-query cache
                 queryClient.setQueryData(["audio_result"], result)
                 setAudioResult(result)
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Audio analysis failed:', err)
+                const errorMessage = err?.message || 'Audio analysis failed.';
+                // Show error to user
+                showToast(
+                  "Audio Analysis Error",
+                  errorMessage.includes('rate limit') 
+                    ? "API rate limit exceeded. Please wait and try again, or switch to Ollama."
+                    : errorMessage,
+                  "error"
+                )
               }
             }
             reader.readAsDataURL(blob)
@@ -495,14 +517,18 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                     title={problemStatementData?.output_format?.subtype === "voice" ? "Audio Result" : "Screenshot Result"}
                     content={problemStatementData.problem_statement}
                     isLoading={false}
+                    isFormatted={true}
+                    isAudioResult={problemStatementData?.output_format?.subtype === "voice"}
                   />
                 ) : (
                   <>
                     {/* Problem Statement Section - Only for non-manual */}
                     <ContentSection
                       title={problemStatementData?.output_format?.subtype === "voice" ? "Voice Input" : "Problem Statement"}
-                      content={problemStatementData?.problem_statement}
+                      content={problemStatementData?.problem_statement || ""}
                       isLoading={!problemStatementData}
+                      isFormatted={problemStatementData?.output_format?.subtype === "voice"}
+                      isAudioResult={problemStatementData?.output_format?.subtype === "voice"}
                     />
                     {/* Show loading state when waiting for solution */}
                     {problemStatementData && !solutionData && (
