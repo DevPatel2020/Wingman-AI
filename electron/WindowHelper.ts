@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from "electron"
+import { BrowserWindow, desktopCapturer, screen } from "electron"
 import { AppState } from "main"
 import path from "node:path"
 
@@ -98,14 +98,13 @@ export class WindowHelper {
 
     this.mainWindow = new BrowserWindow(windowSettings)
     // this.mainWindow.webContents.openDevTools()
-    // Enable content protection: Window visible to user but hidden from screen sharing/recordings
-    // This allows you to use Cluely during screen shares without viewers seeing it
-    this.mainWindow.setContentProtection(true)
+    // Transparency by design: the window is NOT hidden from screen sharing or
+    // recordings. If you share your screen, other participants can see Wingman.
 
     // Grant microphone (and other media) permissions so audio recording works on Windows
     this.mainWindow.webContents.session.setPermissionRequestHandler(
       (webContents, permission, callback) => {
-        const allowedPermissions = ['media', 'audioCapture', 'microphone']
+        const allowedPermissions = ['media', 'audioCapture', 'microphone', 'display-capture']
         if (allowedPermissions.includes(permission)) {
           callback(true)
         } else {
@@ -116,8 +115,26 @@ export class WindowHelper {
     // Also handle permission checks (Electron 20+)
     this.mainWindow.webContents.session.setPermissionCheckHandler(
       (webContents, permission) => {
-        const allowedPermissions = ['media', 'audioCapture', 'microphone']
+        const allowedPermissions = ['media', 'audioCapture', 'microphone', 'display-capture']
         return allowedPermissions.includes(permission)
+      }
+    )
+
+    // Meeting-audio capture for live transcription: when the renderer calls
+    // getDisplayMedia, hand it the system audio loopback (Windows) of the
+    // primary screen. The video track is discarded by the renderer.
+    this.mainWindow.webContents.session.setDisplayMediaRequestHandler(
+      (_request, callback) => {
+        desktopCapturer
+          .getSources({ types: ["screen"] })
+          .then((sources) => {
+            if (sources.length === 0) return callback({})
+            callback({ video: sources[0], audio: "loopback" })
+          })
+          .catch((err) => {
+            console.error("Display media request failed:", err)
+            callback({})
+          })
       }
     )
 
@@ -125,7 +142,6 @@ export class WindowHelper {
       this.mainWindow.setVisibleOnAllWorkspaces(true, {
         visibleOnFullScreen: true
       })
-      this.mainWindow.setHiddenInMissionControl(true)
       this.mainWindow.setAlwaysOnTop(true, "floating")
     }
     if (process.platform === "linux") {
@@ -136,7 +152,8 @@ export class WindowHelper {
       // Keep window focusable on Linux for proper interaction
       this.mainWindow.setFocusable(true)
     } 
-    this.mainWindow.setSkipTaskbar(true)
+    // Show in the taskbar like any normal app so it is never "hidden"
+    this.mainWindow.setSkipTaskbar(false)
     this.mainWindow.setAlwaysOnTop(true)
 
     this.mainWindow.loadURL(startUrl).catch((err) => {
@@ -151,9 +168,7 @@ export class WindowHelper {
         this.mainWindow.show()
         this.mainWindow.focus()
         this.mainWindow.setAlwaysOnTop(true)
-        // Ensure content protection is enabled (visible to user, hidden from screen sharing)
-        this.mainWindow.setContentProtection(true)
-        console.log("Window is now visible and centered (protected from screen sharing)")
+        console.log("Window is now visible and centered")
       }
     })
 
@@ -194,6 +209,12 @@ export class WindowHelper {
     })
   }
 
+  /** Reflect recording state in the OS window title so it is visible outside the overlay too. */
+  public setRecordingIndicator(isRecording: boolean): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+    this.mainWindow.setTitle(isRecording ? "● Recording · Wingman AI" : "Wingman AI")
+  }
+
   public getMainWindow(): BrowserWindow | null {
     return this.mainWindow
   }
@@ -230,12 +251,8 @@ export class WindowHelper {
       })
     }
 
-    // Use show() instead of showInactive() to ensure window is visible to user
-    // Content protection will still hide it from screen sharing
     this.mainWindow.show()
     this.mainWindow.focus()
-    // Re-apply content protection after showing (in case it was reset)
-    this.mainWindow.setContentProtection(true)
 
     this.isWindowVisible = true
   }
@@ -290,9 +307,6 @@ export class WindowHelper {
     this.mainWindow.show()
     this.mainWindow.focus()
     this.mainWindow.setAlwaysOnTop(true)
-    // Ensure content protection is enabled so window is hidden from screen sharing
-    // but remains visible to the user
-    this.mainWindow.setContentProtection(true)
     this.isWindowVisible = true
     
     console.log(`Window centered and shown`)

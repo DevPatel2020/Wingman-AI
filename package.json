@@ -1,5 +1,5 @@
 {
-  "name": "interview-coder",
+  "name": "wingman-ai",
   "version": "1.0.0",
   "main": "./dist-electron/main.js",
   "scripts": {
@@ -14,11 +14,14 @@
     "app:build": "npm run build && electron-builder",
     "watch": "tsc -p electron/tsconfig.json --watch",
     "start": "npm run app:dev",
-    "dist": "npm run app:build"
+    "dist": "npm run app:build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "eval": "vitest run tests/retrieval.eval.test.ts --reporter=verbose"
   },
   "build": {
-    "appId": "com.electron.meeting-notes",
-    "productName": "Meeting Notes Coder",
+    "appId": "com.wingmanai.app",
+    "productName": "Wingman AI",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -96,15 +99,15 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ibttf",
-        "repo": "interview-coder-frontend"
+        "owner": "DevPatel2020",
+        "repo": "Wingman-AI"
       }
     ]
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Open-source, privacy-first AI copilot for meetings and study sessions: live transcription, notes and screen-aware Q&A.",
   "devDependencies": {
     "@types/color": "^4.2.0",
     "@types/diff": "^6.0.0",
@@ -131,6 +134,7 @@
     "vite": "^5.4.11",
     "vite-plugin-electron": "^0.28.8",
     "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^2.1.9",
     "wait-on": "^8.0.1"
   },
   "dependencies": {

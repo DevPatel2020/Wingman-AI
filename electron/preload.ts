@@ -43,6 +43,16 @@ interface ElectronAPI {
 
   testLlmConnection: () => Promise<{ success: boolean; error?: string }>
   centerAndShowWindow: () => Promise<void>
+
+  // Live transcription
+  platform: string
+  transcriptStart: (opts: { title?: string; consentConfirmed: boolean; source: "mic" | "mic+system" }) => Promise<{ sessionId: string; title: string; backend: string }>
+  transcriptChunk: (chunk: { sessionId: string; data: string; mimeType: string; startMs: number; endMs: number }) => Promise<any>
+  transcriptStop: (sessionId: string) => Promise<{ sessionId: string; segmentCount: number; memoryWarning?: string }>
+  transcriptSummarize: (sessionId: string) => Promise<string>
+  transcriptGetMarkdown: (sessionId: string) => Promise<string>
+  transcriptExport: (sessionId: string) => Promise<{ saved: boolean; path?: string }>
+  transcriptBackend: () => Promise<string>
   
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
@@ -193,6 +203,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
   centerAndShowWindow: () => ipcRenderer.invoke("center-and-show-window"),
+
+  // Live transcription
+  platform: process.platform,
+  transcriptStart: (opts: { title?: string; consentConfirmed: boolean; source: "mic" | "mic+system" }) =>
+    ipcRenderer.invoke("transcript:start", opts),
+  transcriptChunk: (chunk: { sessionId: string; data: string; mimeType: string; startMs: number; endMs: number }) =>
+    ipcRenderer.invoke("transcript:chunk", chunk),
+  transcriptStop: (sessionId: string) => ipcRenderer.invoke("transcript:stop", sessionId),
+  transcriptSummarize: (sessionId: string) => ipcRenderer.invoke("transcript:summarize", sessionId),
+  transcriptGetMarkdown: (sessionId: string) => ipcRenderer.invoke("transcript:get-markdown", sessionId),
+  transcriptExport: (sessionId: string) => ipcRenderer.invoke("transcript:export", sessionId),
+  transcriptBackend: () => ipcRenderer.invoke("transcript:backend"),
   
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
 } as ElectronAPI)

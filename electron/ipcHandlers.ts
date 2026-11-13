@@ -1,11 +1,16 @@
 // ipcHandlers.ts
 
-import { ipcMain, app } from "electron"
+import { ipcMain, app, dialog, BrowserWindow } from "electron"
+import fs from "fs"
+import { AudioSource } from "./TranscriptStore"
 import { AppState } from "./main"
 import { getLoadedEnvPath, loadEnv } from "./env"
 import { formatLlmError } from "./llmErrors"
+import { initializeFeatureIpc } from "./featureIpc"
 
 export function initializeIpcHandlers(appState: AppState): void {
+  initializeFeatureIpc(appState)
+
   ipcMain.handle(
     "update-content-dimensions",
     async (event, { width, height }: { width: number; height: number }) => {
@@ -116,6 +121,121 @@ export function initializeIpcHandlers(appState: AppState): void {
       throw new Error(formatLlmError(error, llm.getCurrentProvider()))
     }
   });
+
+  // ─── Live transcription ──────────────────────────────────────────────────
+  // Chunks for a session are transcribed one at a time, in arrival order, so
+  // the transcript stays ordered and we never flood the STT backend.
+  const sessionQueues = new Map<string, Promise<unknown>>()
+
+  ipcMain.handle(
+    "transcript:start",
+    async (_event, opts: { title?: string; consentConfirmed: boolean; source: AudioSource }) => {
+      if (opts?.consentConfirmed !== true) {
+        throw new Error("Recording requires confirming that all participants have been informed.")
+      }
+      const session = appState.transcriptStore.start({
+        title: opts.title,
+        source: opts.source === "mic+system" ? "mic+system" : "mic",
+        backend: appState.transcriptionService.describeBackend()
+      })
+      sessionQueues.set(session.id, Promise.resolve())
+      appState.setRecording(true)
+      return { sessionId: session.id, title: session.title, backend: session.backend }
+    }
+  )
+
+  ipcMain.handle(
+    "transcript:chunk",
+    async (
+      _event,
+      chunk: { sessionId: string; data: string; mimeType: string; startMs: number; endMs: number }
+    ) => {
+      const session = appState.transcriptStore.get(chunk.sessionId)
+      const previous = sessionQueues.get(chunk.sessionId) ?? Promise.resolve()
+      const job = previous
+        .catch((): void => undefined)
+        .then(async () => {
+          const text = await appState.transcriptionService.transcribe(
+            Buffer.from(chunk.data, "base64"),
+            chunk.mimeType
+          )
+          if (!text) return null
+          return appState.transcriptStore.append(chunk.sessionId, {
+            startMs: chunk.startMs,
+            endMs: chunk.endMs,
+            text,
+            source: session.source
+          })
+        })
+      sessionQueues.set(chunk.sessionId, job)
+      try {
+        return await job
+      } catch (error: any) {
+        const llm = appState.processingHelper.getLLMHelper()
+        throw new Error(formatLlmError(error, llm.getCurrentProvider()))
+      }
+    }
+  )
+
+  ipcMain.handle("transcript:stop", async (_event, sessionId: string) => {
+    await (sessionQueues.get(sessionId) ?? Promise.resolve()).catch((): void => undefined)
+    sessionQueues.delete(sessionId)
+    appState.setRecording(false)
+    const session = appState.transcriptStore.stop(sessionId)
+    // Add the finished session to meeting memory so it becomes searchable.
+    let memoryWarning: string | undefined
+    if (session.segments.length > 0) {
+      try {
+        memoryWarning = (await appState.memoryStore.indexSession(session)).warning
+      } catch (error: any) {
+        memoryWarning = `Could not add this session to memory: ${error?.message ?? error}`
+      }
+    }
+    return { sessionId: session.id, segmentCount: session.segments.length, memoryWarning }
+  })
+
+  ipcMain.handle("transcript:summarize", async (_event, sessionId: string) => {
+    const store = appState.transcriptStore
+    const session = store.get(sessionId)
+    if (session.segments.length === 0) throw new Error("Nothing has been transcribed yet.")
+    const summary = await appState.processingHelper
+      .getLLMHelper()
+      .summarizeTranscript(store.toPlainText(session))
+    store.setSummary(sessionId, summary)
+    // Re-index so the notes become searchable too (ignore failures; transcript is already indexed).
+    if (session.endedAt) appState.memoryStore.indexSession(session).catch((): void => undefined)
+    return summary
+  })
+
+  ipcMain.handle("transcript:get-markdown", async (_event, sessionId: string) => {
+    const store = appState.transcriptStore
+    return store.toMarkdown(store.get(sessionId))
+  })
+
+  ipcMain.handle("transcript:export", async (event, sessionId: string) => {
+    const store = appState.transcriptStore
+    const session = store.get(sessionId)
+    const safeTitle = session.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "meeting-notes"
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.SaveDialogOptions = {
+      title: "Export meeting notes",
+      defaultPath: `${safeTitle}.md`,
+      filters: [{ name: "Markdown", extensions: ["md"] }]
+    }
+    // Cast: a stale @types/electron in devDependencies shadows Electron 33's
+    // own typings with the old callback-style signature.
+    const showSaveDialog = dialog.showSaveDialog as unknown as (
+      ...args: unknown[]
+    ) => Promise<Electron.SaveDialogReturnValue>
+    const result = win ? await showSaveDialog(win, options) : await showSaveDialog(options)
+    if (result.canceled || !result.filePath) return { saved: false }
+    await fs.promises.writeFile(result.filePath, store.toMarkdown(session), "utf-8")
+    return { saved: true, path: result.filePath }
+  })
+
+  ipcMain.handle("transcript:backend", async () => {
+    return appState.transcriptionService.describeBackend()
+  })
 
   ipcMain.handle("quit-app", () => {
     app.quit()

@@ -56,6 +56,16 @@ declare global {
       switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
       switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
       testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+
+      // Live transcription
+      platform: string
+      transcriptStart: (opts: { title?: string; consentConfirmed: boolean; source: "mic" | "mic+system" }) => Promise<{ sessionId: string; title: string; backend: string }>
+      transcriptChunk: (chunk: { sessionId: string; data: string; mimeType: string; startMs: number; endMs: number }) => Promise<{ id: string; startMs: number; endMs: number; text: string } | null>
+      transcriptStop: (sessionId: string) => Promise<{ sessionId: string; segmentCount: number; memoryWarning?: string }>
+      transcriptSummarize: (sessionId: string) => Promise<string>
+      transcriptGetMarkdown: (sessionId: string) => Promise<string>
+      transcriptExport: (sessionId: string) => Promise<{ saved: boolean; path?: string }>
+      transcriptBackend: () => Promise<string>
       
       invoke: (channel: string, ...args: any[]) => Promise<any>
     }

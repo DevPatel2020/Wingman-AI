@@ -4,7 +4,7 @@
 
 ### 1. Install Dependencies
 ```bash
-cd free-cluely
+cd "Wingman AI"
 npm install
 ```
 
@@ -13,7 +13,7 @@ npm install
 **Choose ONE option:**
 
 **Option A - Gemini (Cloud):**
-1. Get API key: https://makersuite.google.com/app/apikey
+1. Get API key: https://aistudio.google.com/app/apikey
 2. Create `.env` file:
    ```env
    GEMINI_API_KEY=your_key_here
@@ -36,7 +36,7 @@ npm start
 
 ## 📋 Full Instructions
 
-See `SETUP_GUIDE.md` for detailed instructions and troubleshooting.
+See `SETUP_GUIDE.md` for detailed instructions and `README.md` for features (Notes, Memory, Study, Practice).
 
 ## ⌨️ Keyboard Shortcuts
 

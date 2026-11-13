@@ -4,12 +4,11 @@ import dotenv from "dotenv"
 
 let loadedEnvPath: string | null = null
 
-/** Resolve .env from app root even when cwd is the parent Cluely folder. */
+/** Resolve .env from the app root, even when launched from a parent folder. */
 export function loadEnv(): string {
   const candidates = [
     path.resolve(__dirname, "..", ".env"),
     path.resolve(process.cwd(), ".env"),
-    path.resolve(process.cwd(), "free-cluely", ".env")
   ]
 
   for (const envPath of candidates) {
