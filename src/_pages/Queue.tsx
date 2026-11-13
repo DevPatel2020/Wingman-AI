@@ -11,6 +11,12 @@ import {
 import QueueCommands from "../components/Queue/QueueCommands"
 import ModelSelector from "../components/ui/ModelSelector"
 import FormattedMessage from "../components/Queue/FormattedMessage"
+import TranscriptPanel from "../components/Transcript/TranscriptPanel"
+import { useLiveTranscription } from "../components/Transcript/useLiveTranscription"
+import MemoryPanel from "../components/Memory/MemoryPanel"
+import StudyPanel from "../components/Study/StudyPanel"
+import PracticePanel from "../components/Practice/PracticePanel"
+import { PanelId } from "../components/Queue/QueueCommands"
 
 interface QueueProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
@@ -35,6 +41,9 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   const chatInputRef = useRef<HTMLInputElement>(null)
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [activePanel, setActivePanel] = useState<PanelId | null>(null)
+  // Lives here (not in the panel) so recording continues when the panel is collapsed
+  const live = useLiveTranscription()
   const [currentModel, setCurrentModel] = useState<{ provider: "gemini" | "ollama"; model: string }>({ provider: "gemini", model: "gemini-2.5-flash-lite" })
 
   const barRef = useRef<HTMLDivElement>(null)
@@ -252,8 +261,16 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
               onTooltipVisibilityChange={handleTooltipVisibilityChange}
               onChatToggle={handleChatToggle}
               onSettingsToggle={handleSettingsToggle}
+              activePanel={activePanel}
+              onPanelToggle={(panel) => setActivePanel((cur) => (cur === panel ? null : panel))}
+              isTranscribing={live.isRecording}
+              transcribeElapsedMs={live.elapsedMs}
             />
           </div>
+          {activePanel === "notes" && <TranscriptPanel live={live} />}
+          {activePanel === "memory" && <MemoryPanel />}
+          {activePanel === "study" && <StudyPanel />}
+          {activePanel === "practice" && <PracticePanel />}
           {isSettingsOpen && (
             <div className="mt-4 w-full mx-auto">
               <ModelSelector onModelChange={handleModelChange} onChatOpen={() => setIsChatOpen(true)} />

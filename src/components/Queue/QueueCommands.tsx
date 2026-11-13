@@ -2,19 +2,36 @@ import React, { useState, useEffect, useRef } from "react"
 import { IoLogOutOutline } from "react-icons/io5"
 import { Dialog, DialogContent, DialogClose } from "../ui/dialog"
 import FormattedMessage from "./FormattedMessage"
+import { formatOffset } from "../Transcript/useLiveTranscription"
+
+export type PanelId = "notes" | "memory" | "study" | "practice"
+
+const PANEL_TABS: Array<{ id: Exclude<PanelId, "notes">; label: string; title: string }> = [
+  { id: "memory", label: "🧠 Memory", title: "Ask questions about past meetings" },
+  { id: "study", label: "🎓 Study", title: "Flashcards and quizzes from lectures" },
+  { id: "practice", label: "🎯 Practice", title: "Mock interview practice with feedback" }
+]
 
 interface QueueCommandsProps {
   onTooltipVisibilityChange: (visible: boolean, height: number) => void
   screenshots: Array<{ path: string; preview: string }>
   onChatToggle: () => void
   onSettingsToggle: () => void
+  activePanel: PanelId | null
+  onPanelToggle: (panel: PanelId) => void
+  isTranscribing: boolean
+  transcribeElapsedMs: number
 }
 
 const QueueCommands: React.FC<QueueCommandsProps> = ({
   onTooltipVisibilityChange,
   screenshots,
   onChatToggle,
-  onSettingsToggle
+  onSettingsToggle,
+  activePanel,
+  onPanelToggle,
+  isTranscribing,
+  transcribeElapsedMs
 }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -97,19 +114,6 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
   return (
     <div className="w-fit">
       <div className="text-xs text-white/90 liquid-glass-bar py-1 px-4 flex items-center justify-center gap-4 draggable-area">
-        {/* Show/Hide */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] leading-none">Show/Hide</span>
-          <div className="flex gap-1">
-            <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-              ⌘
-            </button>
-            <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
-              B
-            </button>
-          </div>
-        </div>
-
         {/* Screenshot */}
         {/* Removed screenshot button from main bar for seamless screenshot-to-LLM UX */}
 
@@ -128,6 +132,44 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
           </div>
         )}
 
+        {/* Live Notes (transcription). While recording, this doubles as the
+            always-visible REC indicator, even when the notes panel is collapsed. */}
+        <div className="flex items-center gap-2">
+          <button
+            className={`transition-colors rounded-md px-2 py-1 text-[11px] leading-none flex items-center gap-1.5 ${
+              isTranscribing
+                ? "bg-red-500/80 hover:bg-red-500 text-white font-semibold"
+                : `${activePanel === "notes" ? "bg-white/25" : "bg-white/10"} hover:bg-white/20 text-white/70`
+            }`}
+            onClick={() => onPanelToggle("notes")}
+            type="button"
+            title={isTranscribing ? "Recording and transcribing: click to show notes" : "Live meeting notes"}
+          >
+            {isTranscribing ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                REC {formatOffset(transcribeElapsedMs)}
+              </>
+            ) : (
+              <span>📝 Notes</span>
+            )}
+          </button>
+        </div>
+
+        {PANEL_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            title={tab.title}
+            onClick={() => onPanelToggle(tab.id)}
+            className={`${
+              activePanel === tab.id ? "bg-white/25" : "bg-white/10"
+            } hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70`}
+          >
+            {tab.label}
+          </button>
+        ))}
+
         {/* Voice Recording Button */}
         <div className="flex items-center gap-2">
           <button
@@ -138,7 +180,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
             {isRecording ? (
               <span className="animate-pulse">● Stop Recording</span>
             ) : (
-              <span>🎤 Record Voice</span>
+              <span>🎤 Ask</span>
             )}
           </button>
         </div>
@@ -255,7 +297,7 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
         {/* Sign Out Button - Moved to end */}
         <button
           className="text-red-500/70 hover:text-red-500/90 transition-colors hover:cursor-pointer"
-          title="Sign Out"
+          title="Quit Wingman AI"
           onClick={() => window.electronAPI.quitApp()}
         >
           <IoLogOutOutline className="w-4 h-4" />

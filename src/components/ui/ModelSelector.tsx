@@ -45,7 +45,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
     } catch (e) {
       console.error('Error loading config:', e);
       setStatus('error');
-      setStatusMsg('Could not read active model. Restart the app from the free-cluely folder.');
+      setStatusMsg('Could not read active model. Restart the app from the project folder.');
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +153,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
       </div>
 
       <p className="text-[10px] text-gray-600 leading-relaxed">
-        Choose a provider below, then click <strong>Apply & Switch</strong>. Keys in <code className="bg-white/40 px-1 rounded">free-cluely/.env</code> are used when the field is left blank.
+        Choose a provider below, then click <strong>Apply & Switch</strong>. Keys in <code className="bg-white/40 px-1 rounded">.env</code> are used when the field is left blank.
       </p>
 
       <div className="flex gap-1">

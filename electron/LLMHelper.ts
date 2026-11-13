@@ -12,6 +12,7 @@ type LLMProvider = "gemini" | "ollama"
 
 export class LLMHelper {
   private model: GenerativeModel | null = null
+  private geminiApiKey: string | null = null
   private readonly systemPrompt = `You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`
   
   // Ollama config
@@ -33,6 +34,7 @@ export class LLMHelper {
       console.log(`[LLMHelper] Using Ollama with model: ${this.ollamaModel}`)
       this.initializeOllamaModel()
     } else if (apiKey) {
+      this.geminiApiKey = apiKey === "placeholder_no_key" ? null : apiKey
       const genAI = new GoogleGenerativeAI(apiKey)
       this.model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
       console.log("[LLMHelper] Using Google Gemini (gemini-2.5-flash-lite)")
@@ -283,6 +285,91 @@ export class LLMHelper {
     return this.chatWithGemini(message)
   }
 
+  /** Plain completion with the active provider (no extra formatting instructions). */
+  public async complete(prompt: string): Promise<string> {
+    try {
+      if (this.useOllama) return await this.callOllama(prompt)
+      if (!this.model) throw new Error("No LLM provider configured")
+      const result = await this.retryWithBackoff(async () => {
+        if (!this.model) throw new Error("Gemini model not initialized.")
+        return await this.model.generateContent(prompt)
+      })
+      const response = await result.response
+      return response.text()
+    } catch (error: any) {
+      throw new Error(formatLlmError(error, this.getCurrentProvider()))
+    }
+  }
+
+  public getGeminiApiKey(): string | null {
+    return this.geminiApiKey
+  }
+
+  public getOllamaUrl(): string {
+    return this.ollamaUrl
+  }
+
+  /**
+   * Speech-to-text only (no analysis). Used by the live transcription pipeline
+   * when no local Whisper server is configured. Requires Gemini (Ollama models
+   * cannot take audio input).
+   */
+  public async transcribeAudio(base64: string, mimeType: string): Promise<string> {
+    if (!this.model) {
+      throw new Error(
+        "Cloud transcription needs a Gemini API key. Add GEMINI_API_KEY to .env, or set WHISPER_URL to use a local Whisper server."
+      )
+    }
+    const prompt =
+      "Transcribe the speech in this audio clip verbatim. " +
+      "Return ONLY the transcript text, with no commentary, labels, timestamps or quotes. " +
+      "If the clip contains no intelligible speech, return an empty response."
+    const result = await this.retryWithBackoff(async () => {
+      if (!this.model) throw new Error("Gemini model not initialized.")
+      return await this.model.generateContent([prompt, { inlineData: { data: base64, mimeType } }])
+    })
+    const response = await result.response
+    return response.text().trim()
+  }
+
+  /** Structured meeting notes from a timestamped transcript. Works with Gemini or Ollama. */
+  public async summarizeTranscript(transcript: string): Promise<string> {
+    const prompt = `You are Wingman AI, a meeting and study note-taker.
+Below is a timestamped transcript. Write concise notes in Markdown with these sections:
+
+## Summary
+3-5 sentences.
+
+## Key points
+Bullets.
+
+## Decisions
+Bullets, or "None recorded".
+
+## Action items
+"- [ ] task — owner (if mentioned)", or "None recorded".
+
+## Open questions
+Bullets, or "None recorded".
+
+Only use information that is in the transcript. Do not invent names, numbers or decisions.
+
+Transcript:
+${transcript}`
+    try {
+      if (this.useOllama) return await this.callOllama(prompt)
+      if (!this.model) throw new Error("No LLM provider configured")
+      const result = await this.retryWithBackoff(async () => {
+        if (!this.model) throw new Error("Gemini model not initialized.")
+        return await this.model.generateContent(prompt)
+      })
+      const response = await result.response
+      return response.text()
+    } catch (error: any) {
+      throw new Error(formatLlmError(error, this.getCurrentProvider()))
+    }
+  }
+
   // ─── Provider management ────────────────────────────────────────────────────
 
   public getCurrentProvider(): LLMProvider {
@@ -328,11 +415,12 @@ export class LLMHelper {
     const key = apiKey?.trim() || envString("GEMINI_API_KEY")
     if (!key) {
       throw new Error(
-        "No Gemini API key. Add GEMINI_API_KEY to .env in the free-cluely folder, or paste your key in Models."
+        "No Gemini API key. Add GEMINI_API_KEY to .env in the project folder, or paste your key in Models."
       )
     }
     const genAI = new GoogleGenerativeAI(key)
     this.model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+    this.geminiApiKey = key
     this.useOllama = false
     console.log("[LLMHelper] Switched to Gemini")
   }

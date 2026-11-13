@@ -1,0 +1,162 @@
+// TranscriptStore.ts
+// Owns transcript sessions: in-memory state, JSON persistence under the app's
+// userData folder, and Markdown export.
+
+import { app } from "electron"
+import fs from "fs"
+import path from "path"
+import crypto from "crypto"
+
+export type AudioSource = "mic" | "mic+system"
+
+export interface TranscriptSegment {
+  id: string
+  /** Offset from session start, in milliseconds */
+  startMs: number
+  endMs: number
+  text: string
+  source: AudioSource
+}
+
+export interface TranscriptSession {
+  id: string
+  title: string
+  startedAt: number
+  endedAt?: number
+  /** The user confirmed that everyone present was told about the recording */
+  consentConfirmed: true
+  source: AudioSource
+  backend: string
+  segments: TranscriptSegment[]
+  summary?: string
+}
+
+export function formatOffset(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const mm = String(m).padStart(2, "0")
+  const ss = String(s).padStart(2, "0")
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
+
+export class TranscriptStore {
+  private sessions = new Map<string, TranscriptSession>()
+
+  private get dir(): string {
+    const dir = path.join(app.getPath("userData"), "transcripts")
+    fs.mkdirSync(dir, { recursive: true })
+    return dir
+  }
+
+  public start(opts: { title?: string; source: AudioSource; backend: string }): TranscriptSession {
+    const startedAt = Date.now()
+    const session: TranscriptSession = {
+      id: `${new Date(startedAt).toISOString().replace(/[:.]/g, "-")}_${crypto.randomBytes(3).toString("hex")}`,
+      title: opts.title?.trim() || `Meeting ${new Date(startedAt).toLocaleString()}`,
+      startedAt,
+      consentConfirmed: true,
+      source: opts.source,
+      backend: opts.backend,
+      segments: []
+    }
+    this.sessions.set(session.id, session)
+    this.persist(session)
+    return session
+  }
+
+  public get(sessionId: string): TranscriptSession {
+    const cached = this.sessions.get(sessionId)
+    if (cached) return cached
+    // Sessions from earlier runs live on disk only.
+    if (!/^[\w.-]+$/.test(sessionId)) throw new Error(`Invalid session id: ${sessionId}`)
+    const file = path.join(this.dir, `${sessionId}.json`)
+    if (!fs.existsSync(file)) throw new Error(`Unknown transcript session: ${sessionId}`)
+    const session = JSON.parse(fs.readFileSync(file, "utf-8")) as TranscriptSession
+    this.sessions.set(session.id, session)
+    return session
+  }
+
+  /** All saved sessions (newest first), loaded from disk. */
+  public listAll(): TranscriptSession[] {
+    const out: TranscriptSession[] = []
+    for (const name of fs.readdirSync(this.dir)) {
+      if (!name.endsWith(".json")) continue
+      try {
+        const session = this.get(name.slice(0, -5))
+        out.push(session)
+      } catch (error) {
+        console.warn(`[TranscriptStore] Skipping unreadable ${name}:`, error)
+      }
+    }
+    return out.sort((a, b) => b.startedAt - a.startedAt)
+  }
+
+  public delete(sessionId: string): void {
+    this.get(sessionId)
+    this.sessions.delete(sessionId)
+    fs.rmSync(path.join(this.dir, `${sessionId}.json`), { force: true })
+  }
+
+  public append(sessionId: string, segment: Omit<TranscriptSegment, "id">): TranscriptSegment {
+    const session = this.get(sessionId)
+    const full: TranscriptSegment = { id: crypto.randomUUID(), ...segment }
+    session.segments.push(full)
+    session.segments.sort((a, b) => a.startMs - b.startMs)
+    this.persist(session)
+    return full
+  }
+
+  public setSummary(sessionId: string, summary: string): void {
+    const session = this.get(sessionId)
+    session.summary = summary
+    this.persist(session)
+  }
+
+  public stop(sessionId: string): TranscriptSession {
+    const session = this.get(sessionId)
+    session.endedAt = Date.now()
+    this.persist(session)
+    return session
+  }
+
+  public toPlainText(session: TranscriptSession): string {
+    return session.segments.map((s) => `[${formatOffset(s.startMs)}] ${s.text}`).join("\n")
+  }
+
+  public toMarkdown(session: TranscriptSession): string {
+    const started = new Date(session.startedAt)
+    const duration = session.endedAt ? formatOffset(session.endedAt - session.startedAt) : "in progress"
+    const lines = [
+      `# ${session.title}`,
+      "",
+      `- **Date:** ${started.toLocaleString()}`,
+      `- **Duration:** ${duration}`,
+      `- **Audio:** ${session.source === "mic+system" ? "microphone + meeting audio" : "microphone"}`,
+      `- **Transcription:** ${session.backend}`,
+      `- **Participants informed of recording:** yes`,
+      ""
+    ]
+    if (session.summary) {
+      lines.push("---", "", session.summary.trim(), "")
+    }
+    lines.push("---", "", "## Transcript", "")
+    for (const s of session.segments) {
+      lines.push(`**[${formatOffset(s.startMs)}]** ${s.text}`, "")
+    }
+    lines.push("---", "_Generated by Wingman AI_", "")
+    return lines.join("\n")
+  }
+
+  private persist(session: TranscriptSession): void {
+    try {
+      const file = path.join(this.dir, `${session.id}.json`)
+      const tmp = `${file}.tmp`
+      fs.writeFileSync(tmp, JSON.stringify(session, null, 2), "utf-8")
+      fs.renameSync(tmp, file)
+    } catch (error) {
+      console.error("[TranscriptStore] Failed to persist session:", error)
+    }
+  }
+}

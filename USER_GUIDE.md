@@ -1,8 +1,8 @@
-# Cluely User Guide - Features & How to Use
+# Wingman AI User Guide - Features & How to Use
 
 ## 🎯 Overview
 
-Cluely is an **invisible desktop AI assistant** that helps you during meetings, interviews, presentations, and professional conversations. It runs in the background and provides real-time insights, answers, and support.
+Wingman AI is an **open, consent-first desktop AI assistant** that helps you during meetings, lectures, study sessions and presentations. It sits on top of your other windows and provides real-time insights, answers, and support.
 
 ---
 
@@ -75,7 +75,7 @@ The app has a **translucent, always-on-top window** with three main views:
 
 | Shortcut | Action | Description |
 |----------|--------|-------------|
-| `Ctrl + B` (Windows)<br>`Cmd + B` (Mac) | Toggle Window | Show/hide the Cluely window |
+| `Ctrl + B` (Windows)<br>`Cmd + B` (Mac) | Toggle Window | Show/hide the Wingman AI window |
 | `Ctrl + H` (Windows)<br>`Cmd + H` (Mac) | Take Screenshot | Capture your screen (window hides temporarily) |
 | `Ctrl + Enter` (Windows)<br>`Cmd + Enter` (Mac) | Solve/Debug | Process screenshots and generate solution |
 | `Ctrl + R` (Windows)<br>`Cmd + R` (Mac) | Start Over | Clear everything and start fresh |
@@ -91,7 +91,7 @@ The app has a **translucent, always-on-top window** with three main views:
 
 ---
 
-## 🚀 How to Use Cluely
+## 🚀 How to Use Wingman AI
 
 ### **Basic Workflow**
 
@@ -396,7 +396,7 @@ AI: [Calculates and explains complexity]
 
 ## 🎉 You're Ready!
 
-You now know how to use Cluely! Start by:
+You now know how to use Wingman AI! Start by:
 1. Taking a screenshot (`Ctrl + H`)
 2. Opening the chat (💬 Chat button)
 3. Asking questions or getting solutions

@@ -5,16 +5,16 @@ Ctrl + R       →  Start Over (Clear All)
 Ctrl + Q       →  Quit App
 Ctrl + Arrow   →  Move Window
 
-# Cluely - Quick Features Reference
+# Wingman AI - Quick Features Reference
 
-## 🎯 What Cluely Does
+## 🎯 What Wingman AI Does
 
-**Cluely is an invisible AI assistant that:**
+**Wingman AI is an open AI assistant that:**
 - ✅ Analyzes screenshots of problems, code, documents
 - ✅ Provides instant AI-powered solutions and explanations
 - ✅ Chats with you about anything on your screen
 - ✅ Records and transcribes audio/voice input
-- ✅ Works in the background during meetings, interviews, presentations
+- ✅ Transcribes meetings and lectures live (with participant consent)
 - ✅ Supports both cloud (Gemini) and local (Ollama) AI
 
 ---
@@ -91,8 +91,8 @@ Ctrl + Arrow Keys →  Move Window
 
 ## 💡 Common Use Cases
 
-### **Coding Interview**
-1. Screenshot LeetCode problem
+### **Coding Practice**
+1. Screenshot a practice problem you are stuck on
 2. Get solution with explanation
 3. Ask follow-up questions
 
@@ -199,7 +199,7 @@ Ctrl + Arrow Keys →  Move Window
 
 ## 🎉 You're Ready!
 
-**Start using Cluely:**
+**Start using Wingman AI:**
 1. Take a screenshot (`Ctrl + H`)
 2. Open chat (💬 Chat button)
 3. Get solutions (`Ctrl + Enter`)

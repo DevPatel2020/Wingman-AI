@@ -8,6 +8,12 @@ import { WindowHelper } from "./WindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"
 import { ProcessingHelper } from "./ProcessingHelper"
+import { TranscriptStore } from "./TranscriptStore"
+import { TranscriptionService } from "./TranscriptionService"
+import { EmbeddingService } from "./EmbeddingService"
+import { MemoryStore } from "./MemoryStore"
+import { StudyStore } from "./StudyStore"
+import { PracticeStore } from "./PracticeStore"
 
 export class AppState {
   private static instance: AppState | null = null
@@ -16,7 +22,13 @@ export class AppState {
   private screenshotHelper: ScreenshotHelper
   public shortcutsHelper: ShortcutsHelper
   public processingHelper: ProcessingHelper
+  public transcriptStore: TranscriptStore
+  public transcriptionService: TranscriptionService
+  public memoryStore: MemoryStore
+  public studyStore: StudyStore
+  public practiceStore: PracticeStore
   private tray: Tray | null = null
+  private isRecording: boolean = false
 
   // View management
   private view: "queue" | "solutions" = "queue"
@@ -61,6 +73,16 @@ export class AppState {
 
     // Initialize ShortcutsHelper
     this.shortcutsHelper = new ShortcutsHelper(this)
+
+    // Live transcription
+    this.transcriptStore = new TranscriptStore()
+    const getLlm = () => this.processingHelper.getLLMHelper()
+    this.transcriptionService = new TranscriptionService(getLlm)
+
+    // Meeting memory (RAG), study mode and interview practice
+    this.memoryStore = new MemoryStore(new EmbeddingService(getLlm), getLlm)
+    this.studyStore = new StudyStore(getLlm)
+    this.practiceStore = new PracticeStore(getLlm)
   }
 
   public static getInstance(): AppState {
@@ -204,7 +226,7 @@ export class AppState {
     
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Show Interview Coder',
+        label: 'Show Wingman AI',
         click: () => {
           this.centerAndShowWindow()
         }
@@ -248,18 +270,33 @@ export class AppState {
       }
     ])
     
-    this.tray.setToolTip('Interview Coder - Press Cmd+Shift+Space to show')
+    this.tray.setToolTip('Wingman AI - Press Cmd/Ctrl+Shift+Space to show')
     this.tray.setContextMenu(contextMenu)
     
     // Set a title for macOS (will appear in menu bar)
     if (process.platform === 'darwin') {
-      this.tray.setTitle('IC')
+      this.tray.setTitle('WA')
     }
     
     // Double-click to show window
     this.tray.on('double-click', () => {
       this.centerAndShowWindow()
     })
+  }
+
+  /** Surface recording state outside the overlay: window title and tray tooltip. */
+  public setRecording(isRecording: boolean): void {
+    this.isRecording = isRecording
+    this.windowHelper.setRecordingIndicator(isRecording)
+    this.tray?.setToolTip(
+      isRecording
+        ? "Wingman AI - ● Recording & transcribing"
+        : "Wingman AI - Press Cmd/Ctrl+Shift+Space to show"
+    )
+  }
+
+  public getIsRecording(): boolean {
+    return this.isRecording
   }
 
   public setHasDebugged(value: boolean): void {
@@ -300,7 +337,6 @@ async function initializeApp() {
     }
   })
 
-  app.dock?.hide() // Hide dock icon (optional)
   app.commandLine.appendSwitch("disable-background-timer-throttling")
 }
 
